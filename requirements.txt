@@ -39,7 +39,6 @@ grpcio-status==1.62.3
 httplib2==0.31.0
 idna==3.10
 kombu==5.5.4
-lxml==4.9.3
 numpy==2.3.3
 packaging==25.0
 prompt_toolkit==3.0.52
