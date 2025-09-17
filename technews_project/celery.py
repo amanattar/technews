@@ -1,18 +1,19 @@
 import os
 from celery import Celery
 
-# Set the default Django settings module for the 'celery' program.
+# Set the default Django settings module
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'technews_project.settings')
 
 app = Celery('technews_project')
 
-# Using a string here means the worker doesn't have to serialize
-# the configuration object to child processes.
+# Configure Celery using settings from Django settings.py
 app.config_from_object('django.conf:settings', namespace='CELERY')
 
-# Load task modules from all registered Django apps.
+# Autodiscover tasks
 app.autodiscover_tasks()
 
+# Simple debug task
 @app.task(bind=True)
 def debug_task(self):
     print(f'Request: {self.request!r}')
+    return 'Debug task completed successfully'
