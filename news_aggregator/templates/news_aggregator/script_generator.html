@@ -1,0 +1,167 @@
+{% extends 'news_aggregator/base.html' %}
+{% load static %}
+
+{% block title %}Script Generator - TechNews Aggregator{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="h3 mb-4">
+            <i class="fas fa-file-alt me-2"></i>Script Generator
+            <small class="text-muted">Generate tech news scripts from CSV files</small>
+        </h1>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-6 mb-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-light">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-upload me-2"></i>Upload CSV File
+                </h5>
+            </div>
+            <div class="card-body">
+                <form id="scriptGeneratorForm" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="csvFile" class="form-label">Select CSV File</label>
+                        <input class="form-control" type="file" id="csvFile" name="csv_file" accept=".csv" required>
+                        <div class="form-text">Upload a CSV file containing tech news articles</div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary" id="generateScriptBtn">
+                        <i class="fas fa-cogs me-1"></i>Generate Script
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-6 mb-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-file-code me-2"></i>Generated Script
+                </h5>
+                <button class="btn btn-sm btn-outline-secondary" id="copyScriptBtn" style="display: none;">
+                    <i class="fas fa-copy me-1"></i>Copy to Clipboard
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <div id="scriptOutputContainer" style="height: 500px; overflow-y: auto;">
+                    <pre id="scriptOutput" class="p-3 m-0" style="white-space: pre-wrap; font-family: monospace; font-size: 0.9rem;">Upload a CSV file and click "Generate Script" to create a tech news script.</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-light">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-info-circle me-2"></i>Instructions
+                </h5>
+            </div>
+            <div class="card-body">
+                <ol>
+                    <li>Upload a CSV file containing tech news articles with the following columns: title, url, source, author, published_date, description, tags, is_breaking, is_trending, is_featured</li>
+                    <li>Click the "Generate Script" button to create a tech news script using the Gemini AI model</li>
+                    <li>The generated script will appear in the output box on the right</li>
+                    <li>You can copy the script to your clipboard using the "Copy to Clipboard" button</li>
+                </ol>
+                <p class="mb-0">The script will be generated in the following format:</p>
+                <ul class="mb-0">
+                    <li>Breaking News</li>
+                    <li>New Launches</li>
+                    <li>Upcoming Launches</li>
+                    <li>Leaks & Rumors</li>
+                    <li>Deals</li>
+                    <li>WTF News</li>
+                    <li>Rapid Fire</li>
+                    <li>Sources</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function() {
+        // Handle form submission
+        $('#scriptGeneratorForm').on('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const csvFile = $('#csvFile')[0].files[0];
+            
+            if (!csvFile) {
+                showAlert('Please select a CSV file', 'danger');
+                return;
+            }
+            
+            // Show loading state
+            $('#generateScriptBtn').prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i>Generating...');
+            $('#scriptOutput').text('Generating script... Please wait.');
+            
+            // Submit form via AJAX
+            $.ajax({
+                url: '/api/script/generate/',
+                method: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    if (response.success) {
+                        $('#scriptOutput').text(response.script);
+                        $('#copyScriptBtn').show();
+                        showAlert('Script generated successfully!', 'success');
+                    } else {
+                        $('#scriptOutput').text('Error: ' + response.error);
+                        showAlert('Failed to generate script: ' + response.error, 'danger');
+                    }
+                },
+                error: function(xhr) {
+                    const errorMsg = xhr.responseJSON?.error || 'Failed to generate script';
+                    $('#scriptOutput').text('Error: ' + errorMsg);
+                    showAlert('Failed to generate script: ' + errorMsg, 'danger');
+                },
+                complete: function() {
+                    $('#generateScriptBtn').prop('disabled', false).html('<i class="fas fa-cogs me-1"></i>Generate Script');
+                }
+            });
+        });
+        
+        // Copy script to clipboard
+        $('#copyScriptBtn').on('click', function() {
+            const scriptText = $('#scriptOutput').text();
+            
+            navigator.clipboard.writeText(scriptText).then(function() {
+                showAlert('Script copied to clipboard!', 'success');
+            }).catch(function(err) {
+                showAlert('Failed to copy script: ' + err, 'danger');
+            });
+        });
+        
+        // Show alert function
+        function showAlert(message, type) {
+            const alertHtml = `
+                <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+            $('main .container-fluid').prepend(alertHtml);
+            
+            // Auto-dismiss after 5 seconds
+            setTimeout(function() {
+                $('.alert').fadeOut();
+            }, 5000);
+        }
+    });
+</script>
+{% endblock %}

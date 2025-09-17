@@ -1,0 +1,697 @@
+{% extends 'news_aggregator/base.html' %}
+{% load static %}
+
+{% block title %}Dashboard - TechNews Aggregator{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Statistics Cards -->
+    <div class="col-12">
+        <h1 class="h3 mb-4">
+            <i class="fas fa-tachometer-alt me-2"></i>Dashboard
+            <small class="text-muted">Real-time tech news monitoring</small>
+        </h1>
+    </div>
+    
+    <!-- Stats Row -->
+    <div class="col-lg-3 col-md-6 mb-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-newspaper fa-2x text-primary"></i>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <div class="fw-bold h4 mb-0" id="total-articles">--</div>
+                        <div class="text-muted small">Total Articles</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-clock fa-2x text-success"></i>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <div class="fw-bold h4 mb-0" id="articles-today">--</div>
+                        <div class="text-muted small">Today</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-exclamation-triangle fa-2x text-warning"></i>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <div class="fw-bold h4 mb-0" id="breaking-news">--</div>
+                        <div class="text-muted small">Breaking News</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-fire fa-2x text-danger"></i>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <div class="fw-bold h4 mb-0" id="trending-articles">--</div>
+                        <div class="text-muted small">Trending</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Quick Actions -->
+    <div class="col-lg-4 mb-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-light">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-bolt me-2"></i>Quick Actions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-primary" onclick="refreshNow()">
+                        <i class="fas fa-sync me-2"></i>Refresh Now
+                    </button>
+                    <button class="btn btn-success" onclick="runScanNow()">
+                        <i class="fas fa-search me-2"></i>Run Scan Now
+                    </button>
+                    <a href="{% url 'news_aggregator:article_list' %}?time_range=1hour" class="btn btn-info">
+                        <i class="fas fa-list me-2"></i>View Recent Articles
+                    </a>
+                    <button class="btn btn-secondary" onclick="exportCSV()">
+                        <i class="fas fa-download me-2"></i>Export CSV
+                    </button>
+                </div>
+                
+                <hr>
+                
+                <div class="small text-muted">
+                    <div class="d-flex justify-content-between">
+                        <span>Last Refresh:</span>
+                        <span id="last-refresh" class="fw-bold">--</span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span>Active Sources:</span>
+                        <span id="active-sources" class="fw-bold">--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Trending Topics -->
+    <div class="col-lg-4 mb-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-light">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-hashtag me-2"></i>Trending Topics
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="trending-topics">
+                    <div class="text-center text-muted">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        Loading trending topics...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Top Sources -->
+    <div class="col-lg-4 mb-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-light">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-rss me-2"></i>Top Sources
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="top-sources">
+                    <div class="text-center text-muted">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        Loading source statistics...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Recent Articles -->
+    <div class="col-lg-8 mb-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-newspaper me-2"></i>Recent Articles
+                </h5>
+                <a href="{% url 'news_aggregator:article_list' %}" class="btn btn-sm btn-outline-primary">
+                    View All
+                </a>
+            </div>
+            <div class="card-body p-0">
+                <div id="recent-articles">
+                    <div class="text-center p-4 text-muted">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        Loading recent articles...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recent Activity -->
+    <div class="col-lg-4 mb-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-light">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-history me-2"></i>Recent Activity
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="recent-activity">
+                    <div class="text-center text-muted">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        Loading activity...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Export Modal -->
+<div class="modal fade" id="exportModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Export Articles</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="exportForm">
+                    <div class="mb-3">
+                        <label class="form-label">Time Range</label>
+                        <select class="form-select" name="time_range">
+                            <option value="1hour">Last Hour</option>
+                            <option value="24hours" selected>Last 24 Hours</option>
+                            <option value="1week">Last Week</option>
+                            <option value="1month">Last Month</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Format</label>
+                        <select class="form-select" name="format">
+                            <option value="csv" selected>CSV</option>
+                            <option value="json">JSON</option>
+                            <option value="xml">XML</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="only_breaking" id="onlyBreaking">
+                            <label class="form-check-label" for="onlyBreaking">
+                                Breaking news only
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="only_trending" id="onlyTrending">
+                            <label class="form-check-label" for="onlyTrending">
+                                Trending articles only
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="include_content" id="includeContent">
+                            <label class="form-check-label" for="includeContent">
+                                Include full content
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="executeExport()">
+                    <i class="fas fa-download me-1"></i>Export
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Dashboard functionality
+    let dashboardData = {};
+    
+    $(document).ready(function() {
+        loadDashboardData();
+        
+        // Auto-refresh every 5 minutes
+        setInterval(loadDashboardData, 5 * 60 * 1000);
+    });
+    
+    function loadDashboardData() {
+        // Load statistics
+        $.get('/api/articles/stats/')
+            .done(function(data) {
+                dashboardData = data;
+                updateStatistics(data);
+                updateTrendingTopics(data.trending_topics);
+                updateTopSources(data.top_sources);
+                updateRecentActivity(data.recent_activity);
+            })
+            .fail(function() {
+                console.error('Failed to load dashboard statistics');
+            });
+        
+        // Load recent articles - changed to order by newest first
+        $.get('/api/articles/', {
+            ordering: '-published_date',
+            page_size: 10
+        })
+            .done(function(data) {
+                updateRecentArticles(data.results);
+            })
+            .fail(function() {
+                console.error('Failed to load recent articles');
+            });
+    }
+    
+    function updateStatistics(data) {
+        $('#total-articles').text(data.total_articles || 0);
+        $('#articles-today').text(data.articles_today || 0);
+        $('#breaking-news').text(data.breaking_news_count || 0);
+        $('#trending-articles').text(data.trending_articles_count || 0);
+        $('#active-sources').text(data.active_sources_count || 0);
+        $('#last-refresh').text(new Date().toLocaleTimeString());
+    }
+    
+    function updateTrendingTopics(topics) {
+        const container = $('#trending-topics');
+        
+        if (!topics || topics.length === 0) {
+            container.html('<div class="text-muted small">No trending topics found</div>');
+            return;
+        }
+        
+        let html = '';
+        topics.slice(0, 8).forEach(function(topic) {
+            html += `
+                <span class="badge bg-primary me-1 mb-1">${topic}</span>
+            `;
+        });
+        
+        container.html(html);
+    }
+    
+    function updateTopSources(sources) {
+        const container = $('#top-sources');
+        
+        if (!sources || sources.length === 0) {
+            container.html('<div class="text-muted small">No source data available</div>');
+            return;
+        }
+        
+        let html = '';
+        sources.forEach(function(source) {
+            html += `
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="small">${source.name}</span>
+                    <span class="badge bg-secondary">${source.article_count}</span>
+                </div>
+            `;
+        });
+        
+        container.html(html);
+    }
+    
+    function updateRecentArticles(articles) {
+        const container = $('#recent-articles');
+        
+        if (!articles || articles.length === 0) {
+            container.html('<div class="text-center p-4 text-muted">No recent articles found</div>');
+            return;
+        }
+        
+        let html = '';
+        articles.forEach(function(article) {
+            const badges = [];
+            if (article.is_breaking) badges.push('<span class="badge bg-danger">Breaking</span>');
+            if (article.is_trending) badges.push('<span class="badge bg-warning">Trending</span>');
+            if (article.is_featured) badges.push('<span class="badge bg-success">Featured</span>');
+            
+            html += `
+                <div class="border-bottom px-3 py-3">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="flex-grow-1">
+                            <h6 class="mb-1">
+                                <a href="${article.url}" target="_blank" class="text-decoration-none">
+                                    ${article.title}
+                                </a>
+                            </h6>
+                            <p class="text-muted small mb-1">${article.description.substring(0, 120)}...</p>
+                            
+                            <!-- Summary Section for Dashboard -->
+                            <div id="dash-summary-${article.id}" class="summary-section" style="${article.summary && article.summary.trim() ? '' : 'display: none;'}">
+                                <div class="alert alert-info alert-sm mt-2 mb-2 py-2">
+                                    <small><i class="fas fa-robot me-1"></i><strong>AI Summary:</strong> ${article.summary || ''}</small>
+                                </div>
+                            </div>
+                            
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div>
+                                    <small class="text-muted">
+                                        ${article.source_name} • ${article.time_ago} • Score: ${article.final_score}
+                                    </small>
+                                    <div class="ms-2 d-inline">
+                                        ${badges.join(' ')}
+                                    </div>
+                                </div>
+                                ${article.summary && article.summary.trim() ? 
+                                    `<button class="btn btn-sm btn-info" 
+                                            onclick="toggleSummaryDash(${article.id})" 
+                                            id="dash-summary-btn-${article.id}"
+                                            title="Hide AI Summary">
+                                        <i class="fas fa-eye-slash me-1"></i>Hide
+                                    </button>` :
+                                    `<button class="btn btn-sm btn-outline-info" 
+                                            onclick="generateSummaryDash(${article.id})" 
+                                            id="dash-summary-btn-${article.id}"
+                                            title="Generate AI Summary">
+                                        <i class="fas fa-magic me-1"></i>Summary
+                                    </button>`
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.html(html);
+    }
+    
+    function updateRecentActivity(activities) {
+        const container = $('#recent-activity');
+        
+        if (!activities || activities.length === 0) {
+            container.html('<div class="text-muted small">No recent activity</div>');
+            return;
+        }
+        
+        let html = '';
+        activities.slice(0, 8).forEach(function(activity) {
+            const icon = activity.success ? 'fa-check-circle text-success' : 'fa-exclamation-circle text-danger';
+            const time = new Date(activity.time).toLocaleTimeString();
+            
+            html += `
+                <div class="d-flex align-items-center mb-2">
+                    <i class="fas ${icon} me-2"></i>
+                    <div class="flex-grow-1">
+                        <div class="small">${activity.source}</div>
+                        <div class="text-muted" style="font-size: 0.75rem;">
+                            ${activity.articles_new} new • ${time}
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.html(html);
+    }
+    
+    // Action functions
+    function refreshNow() {
+        showAlert('Starting refresh...', 'info');
+        $.post('/api/sources/scrape_all/')
+            .done(function(data) {
+                showAlert('Refresh completed successfully!', 'success');
+                setTimeout(loadDashboardData, 2000); // Reload data after 2 seconds
+            })
+            .fail(function(xhr) {
+                const errorMsg = xhr.responseJSON?.message || 'Failed to start refresh';
+                showAlert(errorMsg, 'danger');
+            });
+    }
+    
+    function runScanNow() {
+        refreshNow(); // Same as refresh for now
+    }
+    
+    function generateSummaryDash(articleId) {
+        const button = $(`#dash-summary-btn-${articleId}`);
+        const summarySection = $(`#dash-summary-${articleId}`);
+        
+        // Validate elements exist
+        if (!button.length || !summarySection.length) {
+            console.error('Dashboard summary elements not found for article:', articleId);
+            return;
+        }
+        
+        // Prevent double-clicking or interference
+        if (button.prop('disabled') || button.hasClass('generating')) {
+            console.log('Dashboard summary generation already in progress for article', articleId);
+            return;
+        }
+        
+        // Update button state with additional tracking
+        button.prop('disabled', true)
+              .addClass('generating')
+              .attr('onclick', '') // Remove onclick to prevent interference
+              .html('<i class="fas fa-spinner fa-spin me-1"></i>Gen...');
+        
+        $.ajax({
+            url: `/api/articles/${articleId}/generate_summary/`,
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val() || 
+                               $('meta[name=csrf-token]').attr('content')
+            },
+            success: function(data) {
+                if (data.mode === 'synchronous' && data.summary) {
+                    // Show summary immediately for synchronous mode
+                    summarySection.find('small').html(`<i class="fas fa-robot me-1"></i><strong>AI Summary:</strong> ${data.summary}`);
+                    summarySection.show();
+                    
+                    button.removeClass('btn-outline-info generating')
+                          .addClass('btn-info')
+                          .attr('onclick', `toggleSummaryDash(${articleId})`)
+                          .html('<i class="fas fa-eye-slash me-1"></i>Hide');
+                    
+                    showAlert('Summary generated successfully!', 'success');
+                } else {
+                    // For async mode, show generation started message
+                    showAlert('Summary generation started', 'info');
+                    
+                    button.removeClass('generating')
+                          .addClass('btn-secondary')
+                          .attr('onclick', `generateSummaryDash(${articleId})`)
+                          .html('<i class="fas fa-clock me-1"></i>Pending');
+                    
+                    // Check for summary after delay
+                    setTimeout(() => checkSummaryStatusDash(articleId), 5000);
+                }
+            },
+            error: function(xhr) {
+                const errorMsg = xhr.responseJSON?.message || 'Failed to generate summary';
+                showAlert(errorMsg, 'danger');
+                
+                button.removeClass('generating btn-secondary')
+                      .addClass('btn-outline-info')
+                      .attr('onclick', `generateSummaryDash(${articleId})`)
+                      .html('<i class="fas fa-magic me-1"></i>Summary');
+            },
+            complete: function() {
+                button.prop('disabled', false);
+            }
+        });
+    }
+    
+    function toggleSummaryDash(articleId) {
+        const summarySection = $(`#dash-summary-${articleId}`);
+        const button = $(`#dash-summary-btn-${articleId}`);
+        
+        // Validate elements exist
+        if (!summarySection.length || !button.length) {
+            console.error('Dashboard summary elements not found for article:', articleId);
+            return;
+        }
+        
+        // Prevent interference during toggle
+        if (button.prop('disabled') || button.hasClass('toggling')) {
+            console.log('Dashboard toggle already in progress for article:', articleId);
+            return;
+        }
+        
+        const isCurrentlyVisible = summarySection.is(':visible');
+        
+        // Add toggling state
+        button.prop('disabled', true)
+              .addClass('toggling')
+              .attr('onclick', ''); // Remove onclick during operation
+        
+        try {
+            if (isCurrentlyVisible) {
+                // Hide summary with animation
+                summarySection.fadeOut(200, function() {
+                    button.removeClass('btn-info toggling')
+                          .addClass('btn-outline-info')
+                          .attr('onclick', `toggleSummaryDash(${articleId})`)
+                          .html('<i class="fas fa-eye me-1"></i>Show')
+                          .prop('disabled', false);
+                });
+            } else {
+                // Show summary with animation
+                summarySection.fadeIn(200, function() {
+                    button.removeClass('btn-outline-info toggling')
+                          .addClass('btn-info')
+                          .attr('onclick', `toggleSummaryDash(${articleId})`)
+                          .html('<i class="fas fa-eye-slash me-1"></i>Hide')
+                          .prop('disabled', false);
+                });
+            }
+        } catch (error) {
+            console.error('Error toggling dashboard summary for article', articleId, error);
+            
+            // Reset button state on error
+            button.removeClass('toggling')
+                  .attr('onclick', `toggleSummaryDash(${articleId})`)
+                  .prop('disabled', false);
+        }
+    }
+    
+    function checkSummaryStatusDash(articleId) {
+        const button = $(`#dash-summary-btn-${articleId}`);
+        
+        $.get(`/api/articles/${articleId}/`)
+            .done(function(article) {
+                if (article.summary && article.summary.trim()) {
+                    const summarySection = $(`#dash-summary-${articleId}`);
+                    
+                    if (summarySection.length && button.length) {
+                        summarySection.find('small').html(`<i class="fas fa-robot me-1"></i><strong>AI Summary:</strong> ${article.summary}`);
+                        summarySection.show();
+                        
+                        button.removeClass('btn-secondary btn-outline-info generating')
+                              .addClass('btn-info')
+                              .attr('onclick', `toggleSummaryDash(${articleId})`)
+                              .html('<i class="fas fa-eye-slash me-1"></i>Hide')
+                              .prop('disabled', false);
+                    }
+                } else {
+                    // Summary not ready yet, reset button
+                    if (button.length) {
+                        button.removeClass('btn-secondary generating')
+                              .addClass('btn-outline-info')
+                              .attr('onclick', `generateSummaryDash(${articleId})`)
+                              .html('<i class="fas fa-magic me-1"></i>Summary')
+                              .prop('disabled', false);
+                    }
+                }
+            })
+            .fail(function() {
+                console.warn('Failed to check dashboard summary status for article:', articleId);
+                
+                // Reset button on failure
+                if (button.length) {
+                    button.removeClass('btn-secondary generating')
+                          .addClass('btn-outline-info')
+                          .attr('onclick', `generateSummaryDash(${articleId})`)
+                          .html('<i class="fas fa-magic me-1"></i>Summary')
+                          .prop('disabled', false);
+                }
+            });
+    }
+    
+    function exportCSV() {
+        $('#exportModal').modal('show');
+    }
+    
+    function executeExport() {
+        const form = document.getElementById('exportForm');
+        const formData = new FormData(form);
+        
+        // Convert FormData to JSON
+        const data = {};
+        for (let [key, value] of formData.entries()) {
+            if (form.elements[key].type === 'checkbox') {
+                data[key] = form.elements[key].checked;
+            } else {
+                data[key] = value;
+            }
+        }
+        
+        $.ajax({
+            url: '/api/articles/export/',
+            method: 'POST',
+            data: JSON.stringify(data),
+            contentType: 'application/json',
+            xhrFields: {
+                responseType: 'blob'
+            },
+            success: function(data, status, xhr) {
+                // Create download link
+                const blob = new Blob([data]);
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                
+                // Get filename from response header
+                const filename = xhr.getResponseHeader('Content-Disposition')
+                    ?.split('filename=')[1]?.replace(/"/g, '') || 'export.csv';
+                a.download = filename;
+                
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                $('#exportModal').modal('hide');
+                showAlert('Export completed successfully', 'success');
+            },
+            error: function() {
+                showAlert('Export failed', 'danger');
+            }
+        });
+    }
+    
+    function showAlert(message, type) {
+        const alertHtml = `
+            <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `;
+        $('main .container-fluid').prepend(alertHtml);
+        
+        // Auto-dismiss after 5 seconds
+        setTimeout(function() {
+            $('.alert').fadeOut();
+        }, 5000);
+    }
+</script>
+{% endblock %}

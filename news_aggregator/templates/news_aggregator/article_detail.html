@@ -1,0 +1,509 @@
+{% extends 'news_aggregator/base.html' %}
+{% load static %}
+
+{% block title %}
+{% if article %}{{ article.title|truncatechars:50 }} - TechNews Aggregator{% else %}Article Not Found{% endif %}
+{% endblock %}
+
+{% block content %}
+{% if article %}
+<div class="row">
+    <div class="col-lg-8 mx-auto">
+        <!-- Back Button -->
+        <div class="mb-3">
+            <a href="{% url 'news_aggregator:article_list' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Back to Articles
+            </a>
+        </div>
+        
+        <!-- Article Header -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+        <!-- Priority Badge Display -->
+        <div class="d-flex justify-content-between align-items-start mb-3">
+            <div>
+                {% if article.is_breaking %}
+                    <span class="badge bg-danger me-2">Breaking</span>
+                {% endif %}
+                {% if article.is_trending %}
+                    <span class="badge bg-warning me-2">Trending</span>
+                {% endif %}
+                {% if article.is_featured %}
+                    <span class="badge bg-success me-2">Featured</span>
+                {% endif %}
+            </div>
+            <div class="text-end">
+                {% if article.priority_label == 'high' %}
+                    <span class="badge bg-danger fs-6">
+                        <i class="fas fa-exclamation-triangle me-1"></i>High Priority
+                    </span>
+                {% elif article.priority_label == 'medium' %}
+                    <span class="badge bg-warning fs-6">
+                        <i class="fas fa-star me-1"></i>Medium Priority
+                    </span>
+                {% elif article.priority_label == 'low' %}
+                    <span class="badge bg-info fs-6">
+                        <i class="fas fa-info-circle me-1"></i>Low Priority
+                    </span>
+                {% else %}
+                    <span class="badge bg-secondary fs-6">
+                        <i class="fas fa-circle me-1"></i>Minimal Priority
+                    </span>
+                {% endif %}
+            </div>
+        </div>
+                
+                <!-- Title -->
+                <h1 class="h2 mb-3">{{ article.title }}</h1>
+                
+                <!-- Meta Information -->
+                <div class="row text-muted mb-3">
+                    <div class="col-md-6">
+                        <small>
+                            <i class="fas fa-rss me-1"></i>{{ article.source.name }}
+                            {% if article.author %} • by {{ article.author }}{% endif %}
+                        </small>
+                    </div>
+                    <div class="col-md-6 text-md-end">
+                        <small>
+                            <i class="fas fa-clock me-1"></i>{{ article.published_date|date:"M d, Y H:i" }}
+                            <span class="ms-2">
+                                <i class="fas fa-eye me-1"></i>{{ article.views_count }} views
+                            </span>
+                        </small>
+                    </div>
+                </div>
+                
+                <!-- Original Article Link -->
+                <div class="mb-3">
+                    <a href="{{ article.url }}" target="_blank" class="btn btn-primary">
+                        <i class="fas fa-external-link-alt me-1"></i>Read Original Article
+                    </a>
+                    <button class="btn btn-outline-secondary ms-2" onclick="copyArticleUrl()">
+                        <i class="fas fa-share me-1"></i>Share
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- AI Summary Section -->
+        {% if article.summary %}
+        <div class="card border-0 shadow-sm mb-4" id="summary-card">
+            <div class="card-header bg-light">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-robot me-2"></i>AI Summary
+                    </h5>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="toggleSummary()" id="summary-toggle">
+                        <i class="fas fa-eye-slash me-1"></i>Hide
+                    </button>
+                </div>
+            </div>
+            <div class="card-body" id="summary-content">
+                <p class="mb-0">{{ article.summary }}</p>
+            </div>
+        </div>
+        {% else %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body text-center">
+                <p class="text-muted mb-3">
+                    <i class="fas fa-magic fa-2x mb-2"></i><br>
+                    No AI summary available for this article yet.
+                </p>
+                <button class="btn btn-primary" onclick="generateSummary()" id="generate-summary-btn">
+                    <i class="fas fa-magic me-1"></i>Generate AI Summary
+                </button>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Article Description -->
+        {% if article.description %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">
+                    <i class="fas fa-info-circle me-2"></i>Description
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="mb-0">{{ article.description }}</p>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Article Content -->
+        {% if article.content %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">
+                    <i class="fas fa-newspaper me-2"></i>Content Preview
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="content-preview">
+                    {% if article.content|length > 500 %}
+                        <p>{{ article.content|truncatewords:100 }}</p>
+                        <div class="text-center">
+                            <a href="{{ article.url }}" target="_blank" class="btn btn-outline-primary">
+                                <i class="fas fa-external-link-alt me-1"></i>Read Full Article
+                            </a>
+                        </div>
+                    {% else %}
+                        <p>{{ article.content }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Tags -->
+        {% if article.tags.all %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">
+                    <i class="fas fa-tags me-2"></i>Tags
+                </h5>
+            </div>
+            <div class="card-body">
+                {% for tag in article.tags.all %}
+                    <span class="badge me-1 mb-1" style="background-color: {{ tag.color|default:'#6c757d'|safe }}; color: white;">
+                        {{ tag.name }}
+                    </span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Keyword Matches -->
+        {% if article.keyword_matches %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">
+                    <i class="fas fa-search me-2"></i>Priority Keywords
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="small text-muted mb-2">Keywords that contributed to this article's priority:</div>
+                {% for keyword, priority in article.keyword_matches.items %}
+                    {% if priority == 'high' %}
+                        <span class="badge bg-danger me-1 mb-1">
+                            {{ keyword }} (High)
+                        </span>
+                    {% elif priority == 'medium' %}
+                        <span class="badge bg-warning me-1 mb-1">
+                            {{ keyword }} (Medium)
+                        </span>
+                    {% elif priority == 'low' %}
+                        <span class="badge bg-info me-1 mb-1">
+                            {{ keyword }} (Low)
+                        </span>
+                    {% else %}
+                        <span class="badge bg-secondary me-1 mb-1">
+                            {{ keyword }}
+                        </span>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Article Metadata -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">
+                    <i class="fas fa-chart-bar me-2"></i>Article Metadata
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <table class="table table-sm table-borderless">
+                            <tr>
+                                <td><strong>Priority Level:</strong></td>
+                                <td>
+                                    {% if article.priority_label == 'high' %}
+                                        <span class="badge bg-danger">High Priority</span>
+                                    {% elif article.priority_label == 'medium' %}
+                                        <span class="badge bg-warning">Medium Priority</span>
+                                    {% elif article.priority_label == 'low' %}
+                                        <span class="badge bg-info">Low Priority</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Minimal Priority</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Legacy Score:</strong></td>
+                                <td>{{ article.priority_score|floatformat:2 }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Source Weight:</strong></td>
+                                <td>{{ article.source.priority_weight|floatformat:1 }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <table class="table table-sm table-borderless">
+                            <tr>
+                                <td><strong>Scraped:</strong></td>
+                                <td>{{ article.scraped_date|date:"M d, Y H:i" }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Updated:</strong></td>
+                                <td>{{ article.updated_date|date:"M d, Y H:i" }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Views:</strong></td>
+                                <td>{{ article.views_count }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% else %}
+<!-- Article Not Found -->
+<div class="row">
+    <div class="col-lg-6 mx-auto text-center">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body py-5">
+                <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                <h3>Article Not Found</h3>
+                <p class="text-muted mb-3">The article you're looking for doesn't exist or may have been removed.</p>
+                <a href="{% url 'news_aggregator:article_list' %}" class="btn btn-primary">
+                    <i class="fas fa-arrow-left me-1"></i>Back to Articles
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if article %}
+<script type="text/javascript">
+    // Article data passed from Django template
+    window.articleData = {
+        id: {{ article.id|default:0 }},
+        title: {{ article.title|escapejs|safe }},
+        hasArticle: true
+    };
+</script>
+{% else %}
+<script type="text/javascript">
+    window.articleData = {
+        id: 0,
+        title: '',
+        hasArticle: false
+    };
+</script>
+{% endif %}
+<script>
+    // Global article ID for this page
+    const ARTICLE_ID = window.articleData ? window.articleData.id : 0;
+    
+    function toggleSummary() {
+        const content = document.getElementById('summary-content');
+        const toggle = document.getElementById('summary-toggle');
+        
+        if (!content || !toggle) {
+            console.error('Summary elements not found');
+            return;
+        }
+        
+        if (content.style.display === 'none') {
+            content.style.display = 'block';
+            toggle.innerHTML = '<i class="fas fa-eye-slash me-1"></i>Hide';
+        } else {
+            content.style.display = 'none';
+            toggle.innerHTML = '<i class="fas fa-eye me-1"></i>Show';
+        }
+    }
+    
+    function generateSummary(articleId) {
+        // Use provided articleId or fallback to global ARTICLE_ID
+        const targetArticleId = articleId || ARTICLE_ID;
+        
+        if (!targetArticleId) {
+            showAlert('Invalid article ID', 'danger');
+            return;
+        }
+        
+        const button = document.getElementById('generate-summary-btn');
+        
+        if (!button) {
+            console.error('Generate summary button not found');
+            return;
+        }
+        
+        // Prevent double-clicking
+        if (button.disabled) {
+            return;
+        }
+        
+        // Update button state
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Generating...';
+        
+        $.ajax({
+            url: `/api/articles/${targetArticleId}/generate_summary/`,
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val() || 
+                               $('meta[name=csrf-token]').attr('content')
+            },
+            success: function(data) {
+                if (data.mode === 'synchronous' && data.summary) {
+                    // Reload page to show the new summary
+                    showAlert('Summary generated successfully!', 'success');
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1000);
+                } else {
+                    // Show message and reset button
+                    showAlert('Summary generation started. Please refresh in a few moments.', 'info');
+                    button.innerHTML = '<i class="fas fa-clock me-1"></i>Processing...';
+                    
+                    // Check for summary periodically
+                    setTimeout(() => checkSummaryStatus(targetArticleId), 5000);
+                }
+            },
+            error: function(xhr) {
+                const errorMsg = xhr.responseJSON?.message || 'Failed to generate summary';
+                showAlert(errorMsg, 'danger');
+                
+                button.disabled = false;
+                button.innerHTML = '<i class="fas fa-magic me-1"></i>Generate AI Summary';
+            }
+        });
+    }
+    
+    function checkSummaryStatus(articleId) {
+        const targetArticleId = articleId || ARTICLE_ID;
+        
+        if (!targetArticleId) {
+            return;
+        }
+        
+        $.get(`/api/articles/${targetArticleId}/`)
+            .done(function(article) {
+                if (article.summary && article.summary.trim()) {
+                    // Reload page to show the new summary
+                    showAlert('Summary is now available!', 'success');
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1000);
+                } else {
+                    // Reset button if summary not ready
+                    const button = document.getElementById('generate-summary-btn');
+                    if (button) {
+                        button.disabled = false;
+                        button.innerHTML = '<i class="fas fa-magic me-1"></i>Generate AI Summary';
+                    }
+                }
+            })
+            .fail(function() {
+                console.warn('Failed to check summary status');
+                const button = document.getElementById('generate-summary-btn');
+                if (button) {
+                    button.disabled = false;
+                    button.innerHTML = '<i class="fas fa-magic me-1"></i>Generate AI Summary';
+                }
+            });
+    }
+    
+    function copyArticleUrl() {
+        const url = window.location.href;
+        
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(() => {
+                showAlert('Article URL copied to clipboard!', 'success');
+            }).catch(() => {
+                fallbackCopyToClipboard(url);
+            });
+        } else {
+            fallbackCopyToClipboard(url);
+        }
+    }
+    
+    function fallbackCopyToClipboard(text) {
+        try {
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            textArea.style.top = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            const successful = document.execCommand('copy');
+            document.body.removeChild(textArea);
+            
+            if (successful) {
+                showAlert('Article URL copied to clipboard!', 'success');
+            } else {
+                showAlert('Failed to copy URL. Please copy manually from the address bar.', 'warning');
+            }
+        } catch (err) {
+            console.error('Fallback copy failed:', err);
+            showAlert('Failed to copy URL. Please copy manually from the address bar.', 'warning');
+        }
+    }
+    
+    function showAlert(message, type) {
+        // Remove existing alerts first
+        $('.alert:not(.alert-permanent)').remove();
+        
+        const alertHtml = `
+            <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        `;
+        
+        // Find the main container or create one
+        let container = $('main .container-fluid, .container, main');
+        if (container.length === 0) {
+            container = $('body');
+        }
+        
+        container.first().prepend(alertHtml);
+        
+        // Auto-dismiss after 5 seconds
+        setTimeout(function() {
+            $('.alert').not('.alert-permanent').fadeOut(500, function() {
+                $(this).remove();
+            });
+        }, 5000);
+    }
+    
+    // Initialize page functionality
+    $(document).ready(function() {
+        // Setup any additional initialization if needed
+        console.log('Article detail page initialized for article ID:', ARTICLE_ID);
+        
+        // Setup keyboard shortcuts
+        $(document).on('keydown', function(e) {
+            // Ctrl/Cmd + C to copy URL
+            if ((e.ctrlKey || e.metaKey) && e.key === 'c' && !$(e.target).is('input, textarea')) {
+                e.preventDefault();
+                copyArticleUrl();
+            }
+            
+            // S to toggle summary
+            if (e.key === 's' && !$(e.target).is('input, textarea')) {
+                e.preventDefault();
+                const summaryToggle = document.getElementById('summary-toggle');
+                if (summaryToggle) {
+                    toggleSummary();
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}

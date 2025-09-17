@@ -1,0 +1,1128 @@
+{% extends 'news_aggregator/base.html' %}
+{% load static %}
+
+{% block title %}Articles - TechNews Aggregator{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h3 mb-0">
+                <i class="fas fa-list me-2"></i>Articles
+                <span class="badge bg-secondary" id="article-count">--</span>
+            </h1>
+            
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-primary" onclick="refreshArticles()">
+                    <i class="fas fa-sync me-1"></i>Refresh
+                </button>
+                <button class="btn btn-success" onclick="showExportModal()">
+                    <i class="fas fa-download me-1"></i>Export
+                </button>
+                <button class="btn btn-secondary" onclick="showBulkActions()">
+                    <i class="fas fa-tasks me-1"></i>Bulk Actions
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <form id="filterForm" class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label">Time Range</label>
+                        <select class="form-select" name="time_range" id="timeRange">
+                            <option value="">All Time</option>
+                            <option value="1hour">Last Hour</option>
+                            <option value="24hours">Last 24 Hours</option>
+                            <option value="1week">Last Week</option>
+                            <option value="1month">Last Month</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label class="form-label">Sources</label>
+                        <select class="form-select" name="sources" id="sourcesFilter" multiple size="3">
+                            <!-- Options loaded dynamically -->
+                        </select>
+                        <small class="form-text text-muted">Hold Ctrl/Cmd to select multiple sources</small>
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label class="form-label">Sort By</label>
+                        <select class="form-select" name="ordering" id="ordering">
+                            <option value="-priority_score,-published_date">Priority</option>
+                            <option value="-published_date" selected>Newest First</option>
+                            <option value="published_date">Oldest First</option>
+                            <option value="-views_count">Most Viewed</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label class="form-label">Min Score</label>
+                        <input type="number" class="form-control" name="min_score" id="minScore" 
+                               placeholder="0" min="0" step="0.1">
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label class="form-label">Search</label>
+                        <input type="text" class="form-control" name="search" id="searchQuery" 
+                               placeholder="Search articles...">
+                    </div>
+                </form>
+                
+                <!-- Filter Toggles -->
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="breakingOnly" name="breaking">
+                            <label class="form-check-label" for="breakingOnly">
+                                <span class="badge bg-danger">Breaking Only</span>
+                            </label>
+                        </div>
+                        
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="trendingOnly" name="trending">
+                            <label class="form-check-label" for="trendingOnly">
+                                <span class="badge bg-warning">Trending Only</span>
+                            </label>
+                        </div>
+                        
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="featuredOnly" name="featured">
+                            <label class="form-check-label" for="featuredOnly">
+                                <span class="badge bg-success">Featured Only</span>
+                            </label>
+                        </div>
+                        
+                        <button type="button" class="btn btn-sm btn-outline-secondary ms-3" onclick="clearFilters()">
+                            <i class="fas fa-times me-1"></i>Clear Filters
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Actions Bar (hidden by default) -->
+<div class="row mb-3" id="bulkActionsBar" style="display: none;">
+    <div class="col-12">
+        <div class="alert alert-info d-flex justify-content-between align-items-center">
+            <span>
+                <span id="selectedCount">0</span> articles selected
+            </span>
+            <div>
+                <button class="btn btn-sm btn-outline-primary me-2" onclick="bulkAction('bookmark')">
+                    <i class="fas fa-bookmark me-1"></i>Bookmark
+                </button>
+                <button class="btn btn-sm btn-outline-success me-2" onclick="bulkAction('feature')">
+                    <i class="fas fa-star me-1"></i>Feature
+                </button>
+                <button class="btn btn-sm btn-outline-secondary me-2" onclick="bulkAction('archive')">
+                    <i class="fas fa-archive me-1"></i>Archive
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="bulkAction('delete')">
+                    <i class="fas fa-trash me-1"></i>Delete
+                </button>
+                <button class="btn btn-sm btn-secondary" onclick="clearSelection()">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Articles List -->
+<div class="row">
+    <div class="col-12">
+        <div id="articlesContainer">
+            <div class="text-center p-5">
+                <i class="fas fa-spinner fa-spin fa-2x text-muted"></i>
+                <div class="mt-2 text-muted">Loading articles...</div>
+            </div>
+        </div>
+        
+        <!-- Pagination -->
+        <div id="paginationContainer" class="d-flex justify-content-center mt-4">
+            <!-- Pagination loaded dynamically -->
+        </div>
+        
+        <!-- Load More Button -->
+        <div class="text-center mt-3">
+            <button class="btn btn-outline-primary" id="loadMoreBtn" onclick="loadMoreArticles()" style="display: none;">
+                <i class="fas fa-plus me-1"></i>Load More Articles
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Export Modal -->
+<div class="modal fade" id="exportModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Export Articles</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="exportForm">
+                    <div class="mb-3">
+                        <label class="form-label">Export Format</label>
+                        <select class="form-select" name="format">
+                            <option value="csv" selected>CSV</option>
+                            <option value="json">JSON</option>
+                            <option value="xml">XML</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="include_content" id="exportIncludeContent">
+                            <label class="form-check-label" for="exportIncludeContent">
+                                Include full article content
+                            </label>
+                        </div>
+                    </div>
+                    <div class="alert alert-info">
+                        <small id="exportInfoText">Current filters will be applied to the export.</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="executeExport()">
+                    <i class="fas fa-download me-1"></i>Export
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentPage = 1;
+    let currentFilters = {};
+    let selectedArticles = new Set();
+    let allArticles = [];
+    let filterOptions = {};
+    
+    // State management for summaries
+    let articleSummaryStates = new Map(); // Map to store summary states
+    let summaryOperationsInProgress = new Set(); // Track ongoing operations
+    
+    // Store summary state
+    function storeSummaryState(articleId, summary, isVisible) {
+        articleSummaryStates.set(articleId, {
+            summary: summary,
+            isVisible: isVisible,
+            timestamp: Date.now()
+        });
+        // Also store in localStorage for persistence across page reloads
+        try {
+            const stateData = Object.fromEntries(articleSummaryStates);
+            localStorage.setItem('articleSummaryStates', JSON.stringify(stateData));
+        } catch (e) {
+            console.warn('Could not save summary states to localStorage:', e);
+        }
+    }
+    
+    // Get summary state
+    function getSummaryState(articleId) {
+        return articleSummaryStates.get(articleId) || null;
+    }
+    
+    // Load states from localStorage on page load
+    function loadSummaryStates() {
+        try {
+            const stored = localStorage.getItem('articleSummaryStates');
+            if (stored) {
+                const stateData = JSON.parse(stored);
+                articleSummaryStates = new Map(Object.entries(stateData).map(([k, v]) => [parseInt(k), v]));
+                
+                // Clean up old states (older than 1 hour)
+                const oneHourAgo = Date.now() - (60 * 60 * 1000);
+                for (const [articleId, state] of articleSummaryStates.entries()) {
+                    if (state.timestamp && state.timestamp < oneHourAgo) {
+                        articleSummaryStates.delete(articleId);
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('Could not load summary states from localStorage:', e);
+            articleSummaryStates = new Map();
+        }
+    }
+    
+    $(document).ready(function() {
+        loadSummaryStates(); // Load saved summary states
+        loadFilterOptions();
+        
+        // Set default ordering to "Newest First" if not already set
+        if (!$('#ordering').val()) {
+            $('#ordering').val('-published_date');
+        }
+        
+        loadArticles();
+        
+        // Setup form change handlers
+        $('#filterForm input, #filterForm select').on('change', function() {
+            // Save current summary states before filtering
+            $('.summary-section').each(function() {
+                const articleId = parseInt($(this).attr('id').replace('summary-', ''));
+                const summaryText = $(this).find('p').text();
+                const isVisible = $(this).is(':visible');
+                if (summaryText && summaryText.trim()) {
+                    storeSummaryState(articleId, summaryText, isVisible);
+                }
+            });
+            
+            currentPage = 1;
+            loadArticles();
+        });
+        
+        // Setup search with debounce
+        let searchTimeout;
+        $('#searchQuery').on('input', function() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(function() {
+                // Save current summary states before searching
+                $('.summary-section').each(function() {
+                    const articleId = parseInt($(this).attr('id').replace('summary-', ''));
+                    const summaryText = $(this).find('p').text();
+                    const isVisible = $(this).is(':visible');
+                    if (summaryText && summaryText.trim()) {
+                        storeSummaryState(articleId, summaryText, isVisible);
+                    }
+                });
+                
+                currentPage = 1;
+                loadArticles();
+            }, 500);
+        });
+        
+        // Update export modal text when it's about to be shown
+        $('#exportModal').on('show.bs.modal', function () {
+            updateExportModalText();
+        });
+        
+        // Periodically refresh filter options to catch new sources
+        setInterval(function() {
+            loadFilterOptions();
+        }, 30000); // Refresh every 30 seconds
+    });
+    
+    function loadFilterOptions() {
+        $.get('/api/articles/filter_options/')
+            .done(function(data) {
+                filterOptions = data;
+                
+                // Populate sources dropdown
+                const sourcesSelect = $('#sourcesFilter');
+                sourcesSelect.empty();
+                data.sources.forEach(function(source) {
+                    sourcesSelect.append(
+                        `<option value="${source.id}">${source.name}</option>`
+                    );
+                });
+            })
+            .fail(function() {
+                console.error('Failed to load filter options');
+            });
+    }
+    
+    // Function to refresh filter options (called from source list page)
+    function refreshArticleFilters() {
+        loadFilterOptions();
+    }
+    
+    function loadArticles(append = false) {
+        // Prevent loading if summary operations are in progress
+        if (summaryOperationsInProgress.size > 0) {
+            console.log('Summary operations in progress, delaying article load...');
+            setTimeout(() => loadArticles(append), 1000);
+            return;
+        }
+        
+        if (!append) {
+            $('#articlesContainer').html(`
+                <div class="text-center p-5">
+                    <i class="fas fa-spinner fa-spin fa-2x text-muted"></i>
+                    <div class="mt-2 text-muted">Loading articles...</div>
+                </div>
+            `);
+        }
+        
+        // Collect filter parameters
+        const formData = new FormData(document.getElementById('filterForm'));
+        const params = {};
+        
+        // Handle regular form fields
+        for (let [key, value] of formData.entries()) {
+            // Skip sources as we'll handle it separately
+            if (key !== 'sources' && value) {
+                params[key] = value;
+            }
+        }
+        
+        // Handle multi-select for sources properly
+        const sourcesSelect = document.getElementById('sourcesFilter');
+        if (sourcesSelect) {
+            const selectedSources = Array.from(sourcesSelect.selectedOptions).map(option => option.value);
+            if (selectedSources.length > 0) {
+                // Create query string manually for sources to ensure proper format
+                let sourcesQuery = '';
+                selectedSources.forEach((sourceId, index) => {
+                    if (index > 0) sourcesQuery += '&';
+                    sourcesQuery += `sources=${encodeURIComponent(sourceId)}`;
+                });
+                
+                // Make the request with proper query string
+                let queryString = $.param(params);
+                if (sourcesQuery) {
+                    queryString = queryString ? `${queryString}&${sourcesQuery}` : sourcesQuery;
+                }
+                
+                const url = `/api/articles/?${queryString}&page=${currentPage}&page_size=20`;
+                
+                $.get(url)
+                    .done(function(data) {
+                        if (append) {
+                            allArticles = allArticles.concat(data.results);
+                        } else {
+                            allArticles = data.results;
+                        }
+                        
+                        renderArticles(allArticles, append);
+                        updateArticleCount(data.count);
+                        updatePagination(data);
+                        
+                        // Show/hide load more button
+                        if (data.next) {
+                            $('#loadMoreBtn').show();
+                        } else {
+                            $('#loadMoreBtn').hide();
+                        }
+                    })
+                    .fail(function() {
+                        $('#articlesContainer').html(`
+                            <div class="text-center p-5 text-muted">
+                                <i class="fas fa-exclamation-triangle fa-2x"></i>
+                                <div class="mt-2">Failed to load articles</div>
+                            </div>
+                        `);
+                    });
+                return;
+            }
+        }
+        
+        // Add checkbox filters
+        if ($('#breakingOnly').is(':checked')) params.breaking = 'true';
+        if ($('#trendingOnly').is(':checked')) params.trending = 'true';
+        if ($('#featuredOnly').is(':checked')) params.featured = 'true';
+        
+        params.page = currentPage;
+        params.page_size = 20;
+        
+        currentFilters = params;
+        
+        $.get('/api/articles/', params)
+            .done(function(data) {
+                if (append) {
+                    allArticles = allArticles.concat(data.results);
+                } else {
+                    allArticles = data.results;
+                }
+                
+                renderArticles(allArticles, append);
+                updateArticleCount(data.count);
+                updatePagination(data);
+                
+                // Show/hide load more button
+                if (data.next) {
+                    $('#loadMoreBtn').show();
+                } else {
+                    $('#loadMoreBtn').hide();
+                }
+            })
+            .fail(function() {
+                $('#articlesContainer').html(`
+                    <div class="text-center p-5 text-muted">
+                        <i class="fas fa-exclamation-triangle fa-2x"></i>
+                        <div class="mt-2">Failed to load articles</div>
+                    </div>
+                `);
+            });
+    }
+    
+    // Function to force refresh articles (called from other pages)
+    function forceRefreshArticles() {
+        // Reload filter options first to ensure we have the latest sources
+        loadFilterOptions();
+        // Then reload articles
+        currentPage = 1;
+        loadArticles();
+    }
+    
+    function renderArticles(articles, append = false) {
+        if (!articles || articles.length === 0) {
+            $('#articlesContainer').html(`
+                <div class="text-center p-5 text-muted">
+                    <i class="fas fa-search fa-2x"></i>
+                    <div class="mt-2">No articles found matching your criteria</div>
+                </div>
+            `);
+            return;
+        }
+        
+        // Before rendering, save current states of visible summaries
+        if (!append) {
+            $('.summary-section').each(function() {
+                const articleId = parseInt($(this).attr('id').replace('summary-', ''));
+                const summaryText = $(this).find('p').text();
+                const isVisible = $(this).is(':visible');
+                if (summaryText && summaryText.trim()) {
+                    storeSummaryState(articleId, summaryText, isVisible);
+                }
+            });
+        }
+        
+        let html = '';
+        
+        articles.forEach(function(article) {
+            const badges = [];
+            if (article.is_breaking) badges.push('<span class="badge bg-danger">Breaking</span>');
+            if (article.is_trending) badges.push('<span class="badge bg-warning">Trending</span>');
+            if (article.is_featured) badges.push('<span class="badge bg-success">Featured</span>');
+            
+            const isSelected = selectedArticles.has(article.id);
+            
+            // Check for stored summary state first, then fallback to server data
+            const storedState = getSummaryState(article.id);
+            let currentSummary = article.summary;
+            let summaryVisible = false;
+            
+            // Determine summary visibility based on stored state and server data
+            if (storedState && storedState.summary) {
+                // Use stored state if we have one with summary content
+                currentSummary = storedState.summary;
+                summaryVisible = storedState.isVisible;
+            } else if (article.summary && article.summary.trim()) {
+                // Use server data if no stored state but article has summary
+                currentSummary = article.summary;
+                summaryVisible = true; // Show by default when we have a summary
+                // Store this initial state
+                storeSummaryState(article.id, article.summary, true);
+            }
+            
+            // Determine button state based on summary availability
+            const hasSummary = currentSummary && currentSummary.trim();
+            const buttonText = summaryVisible ? 'Hide Summary' : (hasSummary ? 'Show Summary' : 'Summary');
+            const buttonIcon = summaryVisible ? 'fa-eye-slash' : (hasSummary ? 'fa-eye' : 'fa-magic');
+            const buttonClass = summaryVisible ? 'btn-info' : 'btn-outline-info';
+            const buttonOnclick = hasSummary ? `toggleSummary(${article.id})` : `generateSummary(${article.id})`;
+            const buttonId = `summary-btn-${article.id}`;
+            
+            html += `
+                <div class="card border-0 shadow-sm mb-3 article-card ${isSelected ? 'border-primary' : ''}">
+                    <div class="card-body">
+                        <div class="d-flex">
+                            <div class="form-check me-3">
+                                <input class="form-check-input article-checkbox" type="checkbox" 
+                                       value="${article.id}" ${isSelected ? 'checked' : ''}
+                                       onchange="toggleArticleSelection(${article.id}, this.checked)">
+                            </div>
+                            
+                            <div class="flex-grow-1">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h5 class="card-title mb-1">
+                                        <a href="/articles/${article.id}/" class="text-decoration-none me-2">
+                                            ${article.title}
+                                        </a>
+                                        <a href="${article.url}" target="_blank" class="text-muted" title="Read original article">
+                                            <i class="fas fa-external-link-alt"></i>
+                                        </a>
+                                    </h5>
+                                    <div class="text-end ms-3">
+                                        ${article.priority_display ? 
+                                            `<span class="badge bg-${article.priority_display.color}">
+                                                <i class="${article.priority_display.icon} me-1"></i>${article.priority_display.label}
+                                            </span>` :
+                                            `<span class="badge bg-secondary">
+                                                <i class="fas fa-circle me-1"></i>Unknown Priority
+                                            </span>`
+                                        }
+                                    </div>
+                                </div>
+                                
+                                <p class="card-text text-muted">${article.description.substring(0, 200)}...</p>
+                                
+                                <!-- Summary Section -->
+                                <div id="summary-${article.id}" class="summary-section" style="${summaryVisible ? '' : 'display: none;'}">
+                                    <div class="alert alert-info mt-2 mb-2">
+                                        <h6><i class="fas fa-robot me-1"></i>AI Summary</h6>
+                                        <p class="mb-0">${currentSummary || ''}</p>
+                                    </div>
+                                </div>
+                                
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <small class="text-muted">
+                                            <i class="fas fa-rss me-1"></i>${article.source_name} •
+                                            <i class="fas fa-clock me-1"></i>${article.time_ago} •
+                                            <i class="fas fa-eye me-1"></i>${article.views_count} views
+                                        </small>
+                                        ${article.author ? `<br><small class="text-muted">by ${article.author}</small>` : ''}
+                                    </div>
+                                    
+                                    <div class="d-flex align-items-center gap-2">
+                                        <button class="btn btn-sm ${buttonClass}" 
+                                                onclick="${buttonOnclick}" 
+                                                id="${buttonId}"
+                                                data-article-id="${article.id}"
+                                                data-has-summary="${hasSummary ? 'true' : 'false'}"
+                                                title="${hasSummary ? (summaryVisible ? 'Hide AI Summary' : 'Show AI Summary') : 'Generate AI Summary'}">
+                                            <i class="fas ${buttonIcon} me-1"></i>${buttonText}
+                                        </button>
+                                        <div>
+                                            ${badges.join(' ')}
+                                            ${article.tags.map(tag => 
+                                                `<span class="badge" style="background-color: ${tag.color}">${tag.name}</span>`
+                                            ).join(' ')}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        if (append) {
+            $('#articlesContainer').append(html);
+        } else {
+            $('#articlesContainer').html(html);
+        }
+    }
+    
+    function updateArticleCount(count) {
+        $('#article-count').text(count || 0);
+    }
+    
+    function updatePagination(data) {
+        // Simple pagination implementation
+        const container = $('#paginationContainer');
+        
+        if (!data.next && !data.previous) {
+            container.empty();
+            return;
+        }
+        
+        let html = '<nav><ul class="pagination">';
+        
+        if (data.previous) {
+            html += '<li class="page-item"><a class="page-link" href="#" onclick="goToPage(' + (currentPage - 1) + ')">Previous</a></li>';
+        }
+        
+        html += `<li class="page-item active"><span class="page-link">${currentPage}</span></li>`;
+        
+        if (data.next) {
+            html += '<li class="page-item"><a class="page-link" href="#" onclick="goToPage(' + (currentPage + 1) + ')">Next</a></li>';
+        }
+        
+        html += '</ul></nav>';
+        container.html(html);
+    }
+    
+    function goToPage(page) {
+        currentPage = page;
+        loadArticles();
+    }
+    
+    function loadMoreArticles() {
+        currentPage++;
+        loadArticles(true);
+    }
+    
+    function toggleArticleSelection(articleId, checked) {
+        if (checked) {
+            selectedArticles.add(articleId);
+        } else {
+            selectedArticles.delete(articleId);
+        }
+        
+        updateBulkActionsBar();
+        updateArticleCardStyles();
+    }
+    
+    function updateBulkActionsBar() {
+        const count = selectedArticles.size;
+        $('#selectedCount').text(count);
+        
+        if (count > 0) {
+            $('#bulkActionsBar').show();
+        } else {
+            $('#bulkActionsBar').hide();
+        }
+        
+        // Update export modal text
+        updateExportModalText();
+    }
+    
+    function updateArticleCardStyles() {
+        $('.article-card').each(function() {
+            const checkbox = $(this).find('.article-checkbox');
+            const articleId = parseInt(checkbox.val());
+            
+            if (selectedArticles.has(articleId)) {
+                $(this).addClass('border-primary');
+            } else {
+                $(this).removeClass('border-primary');
+            }
+        });
+    }
+    
+    function clearSelection() {
+        selectedArticles.clear();
+        $('.article-checkbox').prop('checked', false);
+        updateBulkActionsBar();
+        updateArticleCardStyles();
+    }
+    
+    function showBulkActions() {
+        if (selectedArticles.size === 0) {
+            // Select all visible articles
+            $('.article-checkbox').each(function() {
+                const articleId = parseInt($(this).val());
+                selectedArticles.add(articleId);
+                $(this).prop('checked', true);
+            });
+        }
+        
+        updateBulkActionsBar();
+        updateArticleCardStyles();
+    }
+    
+    function bulkAction(action) {
+        if (selectedArticles.size === 0) {
+            alert('No articles selected');
+            return;
+        }
+        
+        const confirmMessage = `Are you sure you want to ${action} ${selectedArticles.size} articles?`;
+        if (!confirm(confirmMessage)) {
+            return;
+        }
+        
+        $.ajax({
+            url: '/api/articles/bulk_action/',
+            method: 'POST',
+            data: JSON.stringify({
+                article_ids: Array.from(selectedArticles),
+                action: action
+            }),
+            contentType: 'application/json',
+            success: function(data) {
+                showAlert(`${action} completed for ${data.articles_affected} articles`, 'success');
+                clearSelection();
+                loadArticles();
+            },
+            error: function() {
+                showAlert(`Failed to ${action} articles`, 'danger');
+            }
+        });
+    }
+    
+    // Add safeguard to prevent accidental clearing of visible summaries
+    function refreshArticles() {
+        safeRefreshArticles();
+    }
+    
+    function generateSummary(articleId) {
+        const button = $(`#summary-btn-${articleId}`);
+        const summarySection = $(`#summary-${articleId}`);
+        
+        // Validate elements exist
+        if (!button.length || !summarySection.length) {
+            console.error('Summary elements not found for article:', articleId);
+            return;
+        }
+        
+        // Prevent double-clicking or interference
+        if (button.prop('disabled') || button.hasClass('generating')) {
+            console.log('Summary generation already in progress for article', articleId);
+            return;
+        }
+        
+        // Add to operations tracking
+        summaryOperationsInProgress.add(articleId);
+        
+        // Update button state with additional class for tracking
+        button.prop('disabled', true)
+              .addClass('generating')
+              .attr('onclick', '') // Remove onclick to prevent interference
+              .html('<i class="fas fa-spinner fa-spin me-1"></i>Generating...');
+        
+        $.ajax({
+            url: `/api/articles/${articleId}/generate_summary/`,
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val() || 
+                               $('meta[name=csrf-token]').attr('content')
+            },
+            success: function(data) {
+                try {
+                    if (data.mode === 'synchronous' && data.summary) {
+                        // Show summary immediately for synchronous mode
+                        summarySection.find('p').text(data.summary);
+                        summarySection.show();
+                        
+                        // Update button to hide state
+                        button.removeClass('btn-outline-info generating')
+                              .addClass('btn-info')
+                              .attr('onclick', `toggleSummary(${articleId})`)
+                              .html('<i class="fas fa-eye-slash me-1"></i>Hide Summary')
+                              .prop('disabled', false);
+                        
+                        // Store the new summary state
+                        storeSummaryState(articleId, data.summary, true);
+                        
+                        // Show success message with minimal UI interference
+                        console.log('Summary generated successfully for article:', articleId);
+                        showNotification('Summary generated successfully!', 'success');
+                    } else {
+                        // For async mode, show generation started message
+                        showNotification('Summary generation started. Check back in a few moments.', 'info');
+                        
+                        // Reset button to original state for retry
+                        button.removeClass('generating')
+                              .addClass('btn-secondary')
+                              .attr('onclick', `generateSummary(${articleId})`)
+                              .html('<i class="fas fa-clock me-1"></i>Pending...')
+                              .prop('disabled', false);
+                        
+                        // Check for summary after delay
+                        setTimeout(() => checkSummaryStatus(articleId), 5000);
+                    }
+                } catch (error) {
+                    console.error('Error processing summary response:', error);
+                    resetSummaryButton(articleId, 'Failed to process summary');
+                }
+            },
+            error: function(xhr) {
+                const errorMsg = xhr.responseJSON?.message || 'Failed to generate summary';
+                console.error('Summary generation failed for article:', articleId, errorMsg);
+                resetSummaryButton(articleId, errorMsg);
+            },
+            complete: function() {
+                // Remove from operations tracking
+                summaryOperationsInProgress.delete(articleId);
+            }
+        });
+    }
+    
+    function resetSummaryButton(articleId, errorMsg) {
+        const button = $(`#summary-btn-${articleId}`);
+        if (button.length) {
+            // Reset button to original state
+            button.removeClass('generating btn-secondary')
+                  .addClass('btn-outline-info')
+                  .attr('onclick', `generateSummary(${articleId})`)
+                  .html('<i class="fas fa-magic me-1"></i>Summary')
+                  .prop('disabled', false);
+        }
+        
+        if (errorMsg) {
+            showNotification(errorMsg, 'danger');
+        }
+    }
+    
+    // Lightweight notification function that doesn't interfere with DOM
+    function showNotification(message, type = 'info') {
+        // Use console for debugging
+        console.log(`[${type.toUpperCase()}]`, message);
+        
+        // Create a lightweight toast that doesn't interfere with the main content
+        const toastId = 'toast-' + Date.now();
+        const toast = $(`
+            <div id="${toastId}" class="position-fixed" style="top: 20px; right: 20px; z-index: 9999; max-width: 300px;">
+                <div class="alert alert-${type} alert-dismissible fade show shadow-sm" role="alert">
+                    <small>${message}</small>
+                    <button type="button" class="btn-close btn-sm" onclick="$('#${toastId}').fadeOut(function() { $(this).remove(); });"></button>
+                </div>
+            </div>
+        `);
+        
+        $('body').append(toast);
+        
+        // Auto-remove after 4 seconds
+        setTimeout(() => {
+            $(`#${toastId}`).fadeOut(300, function() {
+                $(this).remove();
+            });
+        }, 4000);
+    }
+    
+    function toggleSummary(articleId) {
+        const summarySection = $(`#summary-${articleId}`);
+        const button = $(`#summary-btn-${articleId}`);
+        
+        // Validate elements exist
+        if (!summarySection.length || !button.length) {
+            console.error('Summary elements not found for article:', articleId);
+            return;
+        }
+        
+        // Prevent interference during toggle
+        if (button.prop('disabled') || button.hasClass('toggling')) {
+            console.log('Toggle already in progress for article:', articleId);
+            return;
+        }
+        
+        const summaryText = summarySection.find('p').text();
+        const isCurrentlyVisible = summarySection.is(':visible');
+        
+        // Add toggling state
+        button.prop('disabled', true)
+              .addClass('toggling')
+              .attr('onclick', ''); // Remove onclick during operation
+        
+        try {
+            if (isCurrentlyVisible) {
+                // Hide summary with animation
+                summarySection.fadeOut(200, function() {
+                    button.removeClass('btn-info toggling')
+                          .addClass('btn-outline-info')
+                          .attr('onclick', `toggleSummary(${articleId})`)
+                          .html('<i class="fas fa-eye me-1"></i>Show Summary')
+                          .prop('disabled', false);
+                    
+                    // Store the hidden state
+                    storeSummaryState(articleId, summaryText, false);
+                    console.log('Summary hidden for article:', articleId);
+                });
+            } else {
+                // Show summary with animation
+                summarySection.fadeIn(200, function() {
+                    button.removeClass('btn-outline-info toggling')
+                          .addClass('btn-info')
+                          .attr('onclick', `toggleSummary(${articleId})`)
+                          .html('<i class="fas fa-eye-slash me-1"></i>Hide Summary')
+                          .prop('disabled', false);
+                    
+                    // Store the visible state
+                    storeSummaryState(articleId, summaryText, true);
+                    console.log('Summary shown for article:', articleId);
+                });
+            }
+        } catch (error) {
+            console.error('Error toggling summary for article', articleId, error);
+            
+            // Reset button state on error
+            button.removeClass('toggling')
+                  .attr('onclick', `toggleSummary(${articleId})`)
+                  .prop('disabled', false);
+            
+            showNotification('Error toggling summary', 'danger');
+        }
+    }
+    
+    function checkSummaryStatus(articleId) {
+        const button = $(`#summary-btn-${articleId}`);
+        
+        $.get(`/api/articles/${articleId}/`)
+            .done(function(article) {
+                if (article.summary && article.summary.trim()) {
+                    const summarySection = $(`#summary-${articleId}`);
+                    
+                    if (summarySection.length && button.length) {
+                        // Update summary content
+                        summarySection.find('p').text(article.summary);
+                        summarySection.show();
+                        
+                        // Update button to toggle state
+                        button.removeClass('btn-secondary btn-outline-info generating')
+                              .addClass('btn-info')
+                              .attr('onclick', `toggleSummary(${articleId})`)
+                              .html('<i class="fas fa-eye-slash me-1"></i>Hide Summary')
+                              .prop('disabled', false);
+                        
+                        // Store the new summary state
+                        storeSummaryState(articleId, article.summary, true);
+                        
+                        showNotification('Summary is now available!', 'success');
+                    }
+                } else {
+                    // Summary not ready yet, reset button to original state
+                    if (button.length) {
+                        button.removeClass('btn-secondary generating')
+                              .addClass('btn-outline-info')
+                              .attr('onclick', `generateSummary(${articleId})`)
+                              .html('<i class="fas fa-magic me-1"></i>Summary')
+                              .prop('disabled', false);
+                    }
+                }
+            })
+            .fail(function() {
+                console.warn('Failed to check summary status for article:', articleId);
+                
+                // Reset button on failure
+                if (button.length) {
+                    button.removeClass('btn-secondary generating')
+                          .addClass('btn-outline-info')
+                          .attr('onclick', `generateSummary(${articleId})`)
+                          .html('<i class="fas fa-magic me-1"></i>Summary')
+                          .prop('disabled', false);
+                }
+            });
+    }
+    
+    function clearFilters() {
+        // Save current summary states before clearing filters
+        $('.summary-section').each(function() {
+            const articleId = parseInt($(this).attr('id').replace('summary-', ''));
+            const summaryText = $(this).find('p').text();
+            const isVisible = $(this).is(':visible');
+            if (summaryText && summaryText.trim()) {
+                storeSummaryState(articleId, summaryText, isVisible);
+            }
+        });
+        
+        document.getElementById('filterForm').reset();
+        $('#breakingOnly, #trendingOnly, #featuredOnly').prop('checked', false);
+        currentPage = 1;
+        loadArticles();
+    }
+    
+    function showExportModal() {
+        updateExportModalText();
+        $('#exportModal').modal('show');
+    }
+    
+    function updateExportModalText() {
+        const exportInfoText = document.getElementById('exportInfoText');
+        if (selectedArticles.size > 0) {
+            exportInfoText.innerHTML = `Exporting <strong>${selectedArticles.size}</strong> selected articles.`;
+        } else {
+            exportInfoText.innerHTML = 'Current filters will be applied to the export.';
+        }
+    }
+    
+    function executeExport() {
+        const form = document.getElementById('exportForm');
+        const formData = new FormData(form);
+        
+        let exportData = {};
+        
+        // Check if articles are selected
+        if (selectedArticles.size > 0) {
+            // Export only selected articles
+            exportData = {
+                article_ids: Array.from(selectedArticles)
+            };
+        } else {
+            // Export all filtered articles (existing behavior)
+            exportData = Object.assign({}, currentFilters);
+        }
+        
+        for (let [key, value] of formData.entries()) {
+            if (form.elements[key].type === 'checkbox') {
+                exportData[key] = form.elements[key].checked;
+            } else {
+                exportData[key] = value;
+            }
+        }
+        
+        // Remove pagination params for export
+        delete exportData.page;
+        delete exportData.page_size;
+        
+        $.ajax({
+            url: '/api/articles/export/',
+            method: 'POST',
+            data: JSON.stringify(exportData),
+            contentType: 'application/json',
+            xhrFields: {
+                responseType: 'blob'
+            },
+            success: function(data, status, xhr) {
+                // Create download link
+                const blob = new Blob([data]);
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                
+                // Get filename from response header
+                const filename = xhr.getResponseHeader('Content-Disposition')
+                    ?.split('filename=')[1]?.replace(/"/g, '') || 'export.csv';
+                a.download = filename;
+                
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                $('#exportModal').modal('hide');
+                showAlert('Export completed successfully', 'success');
+            },
+            error: function() {
+                showAlert('Export failed', 'danger');
+            }
+        });
+    }
+    
+    // Debug function to check summary states (can be called from browser console)
+    function debugSummaryStates() {
+        console.log('Current summary states:', articleSummaryStates);
+        console.log('Visible summaries on page:');
+        $('.summary-section:visible').each(function() {
+            const articleId = parseInt($(this).attr('id').replace('summary-', ''));
+            const summaryText = $(this).find('p').text();
+            console.log(`Article ${articleId}: visible, text length: ${summaryText.length}`);
+        });
+    }
+    
+    // Make debug function globally available
+    window.debugSummaryStates = debugSummaryStates;
+    
+    // Legacy showAlert function for backward compatibility
+    function showAlert(message, type) {
+        showNotification(message, type);
+    }
+    
+    // Prevent auto-refresh conflicts with summary states
+    let refreshInProgress = false;
+    
+    function safeRefreshArticles() {
+        if (refreshInProgress) {
+            console.log('Refresh already in progress, skipping...');
+            return;
+        }
+        
+        refreshInProgress = true;
+        
+        // Save current visible summary states before refresh
+        $('.summary-section').each(function() {
+            const articleId = parseInt($(this).attr('id').replace('summary-', ''));
+            const summaryText = $(this).find('p').text();
+            const isVisible = $(this).is(':visible');
+            if (summaryText && summaryText.trim()) {
+                storeSummaryState(articleId, summaryText, isVisible);
+            }
+        });
+        
+        currentPage = 1;
+        loadArticles();
+        
+        // Reset flag after operation completes
+        setTimeout(() => {
+            refreshInProgress = false;
+        }, 1000);
+    }
+</script>
+{% endblock %}

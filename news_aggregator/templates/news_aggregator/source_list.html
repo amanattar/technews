@@ -1,0 +1,587 @@
+{% extends 'news_aggregator/base.html' %}
+{% load static %}
+
+{% block title %}Sources - TechNews Aggregator{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h3 mb-0">
+                <i class="fas fa-rss me-2"></i>RSS Sources
+                <span class="badge bg-secondary" id="source-count">--</span>
+            </h1>
+            
+            <div class="d-flex gap-2">
+                <button class="btn btn-success" onclick="showAddSourceModal()">
+                    <i class="fas fa-plus me-1"></i>Add Source
+                </button>
+                <button class="btn btn-primary" onclick="scrapeAllSources()">
+                    <i class="fas fa-sync me-1"></i>Scrape All
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Sources Grid -->
+<div class="row" id="sourcesContainer">
+    <div class="col-12 text-center p-5">
+        <i class="fas fa-spinner fa-spin fa-2x text-muted"></i>
+        <div class="mt-2 text-muted">Loading sources...</div>
+    </div>
+</div>
+
+<!-- Add/Edit Source Modal -->
+<div class="modal fade" id="sourceModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="sourceModalTitle">Add RSS Source</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="sourceForm">
+                    <input type="hidden" id="sourceId" name="id">
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Source Name *</label>
+                                <input type="text" class="form-control" name="name" id="sourceName" required>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Source Type</label>
+                                <select class="form-select" name="source_type" id="sourceType">
+                                    <option value="rss">RSS Feed</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Feed URL *</label>
+                        <div class="input-group">
+                            <input type="url" class="form-control" name="url" id="sourceUrl" required>
+                            <button class="btn btn-outline-secondary" type="button" onclick="validateFeedUrl()">
+                                <i class="fas fa-check me-1"></i>Validate
+                            </button>
+                        </div>
+                        <div class="form-text">The RSS/XML feed URL for this source</div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Scrape Frequency (minutes)</label>
+                                <input type="number" class="form-control" name="scrape_frequency" 
+                                       id="scrapeFrequency" value="10" min="1" max="1440">
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Priority Weight</label>
+                                <input type="number" class="form-control" name="priority_weight" 
+                                       id="priorityWeight" value="1.0" min="0.1" max="5.0" step="0.1">
+                                <div class="form-text">Multiplier for article scores (1.0 = normal)</div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Status</label>
+                                <div class="form-check form-switch mt-2">
+                                    <input class="form-check-input" type="checkbox" name="is_active" 
+                                           id="isActive" checked>
+                                    <label class="form-check-label" for="isActive">
+                                        Active
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="validationResult" class="alert" style="display: none;"></div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveSource()">
+                    <i class="fas fa-save me-1"></i>Save Source
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Source Details Modal -->
+<div class="modal fade" id="sourceDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="sourceDetailsTitle">Source Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="sourceDetailsContent">
+                <!-- Content loaded dynamically -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="scrapeSource(currentSourceId)">
+                    <i class="fas fa-sync me-1"></i>Scrape Now
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let sources = [];
+    let currentSourceId = null;
+    
+    $(document).ready(function() {
+        loadSources();
+        
+        // Auto-refresh every 2 minutes
+        setInterval(loadSources, 2 * 60 * 1000);
+    });
+    
+    function loadSources() {
+        $.get('/api/sources/')
+            .done(function(data) {
+                sources = data.results || data;
+                renderSources(sources);
+                updateSourceCount(sources.length);
+            })
+            .fail(function() {
+                $('#sourcesContainer').html(`
+                    <div class="col-12 text-center p-5 text-muted">
+                        <i class="fas fa-exclamation-triangle fa-2x"></i>
+                        <div class="mt-2">Failed to load sources</div>
+                    </div>
+                `);
+            });
+    }
+    
+    function renderSources(sources) {
+        if (!sources || sources.length === 0) {
+            $('#sourcesContainer').html(`
+                <div class="col-12 text-center p-5 text-muted">
+                    <i class="fas fa-rss fa-2x"></i>
+                    <div class="mt-2">No sources configured</div>
+                    <button class="btn btn-primary mt-3" onclick="showAddSourceModal()">
+                        <i class="fas fa-plus me-1"></i>Add Your First Source
+                    </button>
+                </div>
+            `);
+            return;
+        }
+        
+        let html = '';
+        
+        sources.forEach(function(source) {
+            const healthStatus = source.health_status || {};
+            const statusColor = {
+                'healthy': 'success',
+                'warning': 'warning',
+                'error': 'danger',
+                'unknown': 'secondary'
+            }[healthStatus.status] || 'secondary';
+            
+            const lastScraped = source.last_scraped ? 
+                new Date(source.last_scraped).toLocaleString() : 'Never';
+            
+            html += `
+                <div class="col-lg-6 col-xl-4 mb-4">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">
+                                <i class="fas fa-rss me-2"></i>
+                                ${source.name}
+                            </h6>
+                            <div class="dropdown">
+                                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" 
+                                        data-bs-toggle="dropdown">
+                                    <i class="fas fa-ellipsis-v"></i>
+                                </button>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" href="#" onclick="scrapeSource(${source.id})">
+                                        <i class="fas fa-sync me-1"></i>Scrape Now
+                                    </a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="viewSourceDetails(${source.id})">
+                                        <i class="fas fa-eye me-1"></i>View Details
+                                    </a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="editSource(${source.id})">
+                                        <i class="fas fa-edit me-1"></i>Edit
+                                    </a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item text-danger" href="#" onclick="deleteSource(${source.id})">
+                                        <i class="fas fa-trash me-1"></i>Delete
+                                    </a></li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <span class="badge bg-${source.is_active ? 'success' : 'secondary'}">
+                                    ${source.is_active ? 'Active' : 'Inactive'}
+                                </span>
+                                <span class="badge bg-${statusColor}">
+                                    ${healthStatus.status || 'Unknown'}
+                                </span>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <small class="text-muted d-block">Feed URL:</small>
+                                <small class="text-break">${source.url}</small>
+                            </div>
+                            
+                            <div class="row text-center mb-3">
+                                <div class="col-4">
+                                    <div class="fw-bold">${source.articles_count || 0}</div>
+                                    <small class="text-muted">Articles</small>
+                                </div>
+                                <div class="col-4">
+                                    <div class="fw-bold">${source.scrape_frequency}m</div>
+                                    <small class="text-muted">Frequency</small>
+                                </div>
+                                <div class="col-4">
+                                    <div class="fw-bold">${source.priority_weight}x</div>
+                                    <small class="text-muted">Weight</small>
+                                </div>
+                            </div>
+                            
+                            <div class="text-center">
+                                <small class="text-muted">
+                                    Last scraped: ${lastScraped}
+                                </small>
+                            </div>
+                            
+                            ${healthStatus.message ? 
+                                `<div class="alert alert-${statusColor} alert-sm mt-2 mb-0">
+                                    <small>${healthStatus.message}</small>
+                                </div>` : ''
+                            }
+                        </div>
+                        
+                        <div class="card-footer bg-light">
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-primary flex-fill" onclick="scrapeSource(${source.id})">
+                                    <i class="fas fa-sync me-1"></i>Scrape
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="viewSourceDetails(${source.id})">
+                                    <i class="fas fa-chart-line me-1"></i>Stats
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        $('#sourcesContainer').html(html);
+    }
+    
+    function updateSourceCount(count) {
+        $('#source-count').text(count);
+    }
+    
+    function showAddSourceModal() {
+        document.getElementById('sourceForm').reset();
+        $('#sourceId').val('');
+        $('#sourceModalTitle').text('Add RSS Source');
+        $('#isActive').prop('checked', true);
+        $('#validationResult').hide();
+        $('#sourceModal').modal('show');
+    }
+    
+    function editSource(sourceId) {
+        const source = sources.find(s => s.id === sourceId);
+        if (!source) return;
+        
+        $('#sourceId').val(source.id);
+        $('#sourceName').val(source.name);
+        $('#sourceUrl').val(source.url);
+        $('#sourceType').val(source.source_type);
+        $('#scrapeFrequency').val(source.scrape_frequency);
+        $('#priorityWeight').val(source.priority_weight);
+        $('#isActive').prop('checked', source.is_active);
+        
+        $('#sourceModalTitle').text('Edit RSS Source');
+        $('#validationResult').hide();
+        $('#sourceModal').modal('show');
+    }
+    
+    function validateFeedUrl() {
+        const url = $('#sourceUrl').val();
+        if (!url) {
+            showValidationResult('Please enter a URL first', 'danger');
+            return;
+        }
+        
+        showValidationResult('Validating...', 'info');
+        
+        $.ajax({
+            url: '/api/sources/validate_url/',
+            method: 'POST',
+            data: JSON.stringify({ url: url }),
+            contentType: 'application/json',
+            success: function(data) {
+                showValidationResult('✓ Valid RSS feed', 'success');
+            },
+            error: function(xhr) {
+                const error = xhr.responseJSON?.url?.[0] || 'Invalid RSS feed';
+                // If it's a 403 error, provide option to add anyway
+                if (error.includes('Access denied') || error.includes('403')) {
+                    showValidationResult('⚠ ' + error + '<br><small>You can still add this source and try scraping manually.</small>', 'warning');
+                } else {
+                    showValidationResult('✗ ' + error, 'danger');
+                }
+            }
+        });
+    }
+    
+    function showValidationResult(message, type) {
+        const alertClasses = {
+            'success': 'alert-success',
+            'danger': 'alert-danger',
+            'warning': 'alert-warning',
+            'info': 'alert-info'
+        };
+        
+        $('#validationResult')
+            .removeClass('alert-success alert-danger alert-warning alert-info')
+            .addClass(alertClasses[type])
+            .html(message)
+            .show();
+    }
+    
+    function saveSource() {
+        const form = document.getElementById('sourceForm');
+        const formData = new FormData(form);
+        
+        // Convert FormData to JSON
+        const data = {};
+        for (let [key, value] of formData.entries()) {
+            if (key === 'is_active') {
+                data[key] = form.elements[key].checked;
+            } else {
+                data[key] = value;
+            }
+        }
+        
+        const sourceId = $('#sourceId').val();
+        const isEdit = sourceId !== '';
+        
+        // Check if we want to bypass validation for 403 errors
+        const validationResult = $('#validationResult').text();
+        const bypassValidation = validationResult.includes('Access denied') || validationResult.includes('403');
+        
+        // If validation failed with 403, ask user if they want to proceed
+        if ($('#validationResult').hasClass('alert-warning') && !bypassValidation) {
+            if (!confirm('Validation failed with access denied (403). The website may be blocking automated requests. Do you want to add this source anyway?')) {
+                return;
+            }
+        }
+        
+        $.ajax({
+            url: isEdit ? `/api/sources/${sourceId}/` : '/api/sources/',
+            method: isEdit ? 'PUT' : 'POST',
+            data: JSON.stringify(data),
+            contentType: 'application/json',
+            success: function(response) {
+                $('#sourceModal').modal('hide');
+                showAlert(`Source ${isEdit ? 'updated' : 'created'} successfully`, 'success');
+                loadSources();
+                // Refresh articles page to update source filter options
+                if (typeof refreshArticleFilters === 'function') {
+                    refreshArticleFilters();
+                }
+                
+                // For new sources, trigger an immediate scrape to fetch articles
+                if (!isEdit && response.id) {
+                    // Small delay to ensure source is fully saved
+                    setTimeout(function() {
+                        scrapeSource(response.id);
+                        // Notify articles page to refresh after a delay to allow scraping to complete
+                        setTimeout(function() {
+                            if (typeof forceRefreshArticles === 'function') {
+                                forceRefreshArticles();
+                            }
+                        }, 5000); // Wait 5 seconds for scraping to complete
+                    }, 1000);
+                }
+            },
+            error: function(xhr) {
+                const errors = xhr.responseJSON;
+                let errorMessage = 'Failed to save source';
+                
+                if (errors) {
+                    const errorList = Object.values(errors).flat();
+                    errorMessage = errorList.join('<br>');
+                }
+                
+                showValidationResult(errorMessage, 'danger');
+            }
+        });
+    }
+    
+    function scrapeSource(sourceId) {
+        $.post(`/api/sources/${sourceId}/scrape_now/`)
+            .done(function(data) {
+                showAlert('Scraping started for source', 'success');
+                // Reload sources after a delay to show updated last_scraped time
+                setTimeout(loadSources, 3000);
+            })
+            .fail(function() {
+                showAlert('Failed to start scraping', 'danger');
+            });
+    }
+    
+    function scrapeAllSources() {
+        $.post('/api/sources/scrape_all/')
+            .done(function(data) {
+                showAlert('Scraping started for all active sources', 'success');
+                setTimeout(loadSources, 3000);
+            })
+            .fail(function() {
+                showAlert('Failed to start scraping', 'danger');
+            });
+    }
+    
+    function deleteSource(sourceId) {
+        const source = sources.find(s => s.id === sourceId);
+        if (!source) return;
+        
+        if (!confirm(`Are you sure you want to delete "${source.name}"? This action cannot be undone.`)) {
+            return;
+        }
+        
+        $.ajax({
+            url: `/api/sources/${sourceId}/`,
+            method: 'DELETE',
+            success: function() {
+                showAlert('Source deleted successfully', 'success');
+                loadSources();
+            },
+            error: function() {
+                showAlert('Failed to delete source', 'danger');
+            }
+        });
+    }
+    
+    function viewSourceDetails(sourceId) {
+        currentSourceId = sourceId;
+        const source = sources.find(s => s.id === sourceId);
+        if (!source) return;
+        
+        $('#sourceDetailsTitle').text(`${source.name} - Details`);
+        
+        // Load recent scraping logs
+        $.get('/api/logs/', { source: sourceId })
+            .done(function(data) {
+                renderSourceDetails(source, data.results || []);
+                $('#sourceDetailsModal').modal('show');
+            })
+            .fail(function() {
+                showAlert('Failed to load source details', 'danger');
+            });
+    }
+    
+    function renderSourceDetails(source, logs) {
+        const healthStatus = source.health_status || {};
+        
+        let html = `
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <h6>Source Information</h6>
+                    <table class="table table-sm">
+                        <tr><td>Name:</td><td>${source.name}</td></tr>
+                        <tr><td>Type:</td><td>${source.source_type}</td></tr>
+                        <tr><td>URL:</td><td class="text-break">${source.url}</td></tr>
+                        <tr><td>Status:</td><td>
+                            <span class="badge bg-${source.is_active ? 'success' : 'secondary'}">
+                                ${source.is_active ? 'Active' : 'Inactive'}
+                            </span>
+                        </td></tr>
+                        <tr><td>Frequency:</td><td>${source.scrape_frequency} minutes</td></tr>
+                        <tr><td>Priority Weight:</td><td>${source.priority_weight}x</td></tr>
+                    </table>
+                </div>
+                
+                <div class="col-md-6">
+                    <h6>Health Status</h6>
+                    <div class="alert alert-${
+                        {'healthy': 'success', 'warning': 'warning', 'error': 'danger'}[healthStatus.status] || 'secondary'
+                    }">
+                        <strong>${healthStatus.status || 'Unknown'}</strong><br>
+                        ${healthStatus.message || 'No health information available'}
+                    </div>
+                    
+                    ${healthStatus.last_success ? 
+                        `<p><small>Last successful scrape: ${new Date(healthStatus.last_success).toLocaleString()}</small></p>` : ''
+                    }
+                    
+                    <table class="table table-sm">
+                        <tr><td>Success Rate:</td><td>${healthStatus.success_rate || 0}%</td></tr>
+                        <tr><td>Avg Articles/Scrape:</td><td>${healthStatus.avg_articles_per_scrape || 0}</td></tr>
+                        <tr><td>Total Articles:</td><td>${source.articles_count || 0}</td></tr>
+                    </table>
+                </div>
+            </div>
+            
+            <h6>Recent Scraping Activity</h6>
+        `;
+        
+        if (!logs || logs.length === 0) {
+            html += '<div class="text-muted">No recent activity</div>';
+        } else {
+            html += '<div class="table-responsive"><table class="table table-sm">';
+            html += '<thead><tr><th>Date</th><th>Status</th><th>Found</th><th>New</th><th>Duration</th><th>Error</th></tr></thead><tbody>';
+            
+            logs.slice(0, 10).forEach(function(log) {
+                const statusIcon = log.success ? 
+                    '<i class="fas fa-check-circle text-success"></i>' : 
+                    '<i class="fas fa-exclamation-circle text-danger"></i>';
+                
+                html += `
+                    <tr>
+                        <td>${new Date(log.scrape_date).toLocaleString()}</td>
+                        <td>${statusIcon}</td>
+                        <td>${log.articles_found}</td>
+                        <td>${log.articles_new}</td>
+                        <td>${log.duration_seconds.toFixed(2)}s</td>
+                        <td>${log.error_message ? `<small class="text-danger">${log.error_message}</small>` : ''}</td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table></div>';
+        }
+        
+        $('#sourceDetailsContent').html(html);
+    }
+    
+    function showAlert(message, type) {
+        const alertHtml = `
+            <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `;
+        $('main .container-fluid').prepend(alertHtml);
+        
+        // Auto-dismiss after 5 seconds
+        setTimeout(function() {
+            $('.alert').fadeOut();
+        }, 5000);
+    }
+</script>
+{% endblock %}
